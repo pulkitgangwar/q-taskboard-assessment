@@ -36,6 +36,11 @@ You can check out the google drive video to get more details about this
 ![image](./images/airtable-export-demo.gif)
 
 
+## Airtable link
+
+[link](https://airtable.com/appbZmpLigjGMAynA/shrQhdcfO8ScGfgGJ)
+
+
 ## Part 3a Proof
 
 ![image](./images/comments.png)
