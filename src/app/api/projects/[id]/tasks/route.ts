@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   getCurrentUser,
@@ -22,21 +23,18 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const q = req.nextUrl.searchParams.get("q");
 
+  // Build the search filter with Prisma's query API so values are bound,
+  // never concatenated into SQL (prevents SQL injection via `q`).
+  const where: Prisma.TaskWhereInput = { projectId };
   if (q) {
-    // search across title and description
-    const sql = `
-      SELECT id, project_id, title, description, status, assignee_id, created_by_id, position, created_at, updated_at
-      FROM tasks
-      WHERE project_id = '${projectId}'
-        AND (title ILIKE '%${q}%' OR description ILIKE '%${q}%')
-      ORDER BY position ASC
-    `;
-    const tasks = await prisma.$queryRawUnsafe(sql);
-    return NextResponse.json({ tasks });
+    where.OR = [
+      { title: { contains: q, mode: "insensitive" } },
+      { description: { contains: q, mode: "insensitive" } },
+    ];
   }
 
   const tasks = await prisma.task.findMany({
-    where: { projectId },
+    where,
     include: {
       assignee: { select: { id: true, name: true, email: true } },
     },
