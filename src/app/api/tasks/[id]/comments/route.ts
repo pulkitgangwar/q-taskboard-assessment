@@ -11,6 +11,7 @@ import {
   canPostComment,
 } from "@/lib/auth";
 import { createCommentSchema } from "@/schemas/comment";
+import { recordActivity } from "@/lib/activity";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { projectId: true },
+    select: { projectId: true, title: true },
   });
   if (!task) return notFound("task not found");
 
@@ -66,13 +67,26 @@ export async function POST(req: NextRequest, { params }: Params) {
   const parsed = createCommentSchema.safeParse(body);
   if (!parsed.success) return badRequest("invalid input", parsed.error.flatten());
 
-  const comment = await prisma.comment.create({
-    data: {
+  // Post the comment and its audit record atomically.
+  const comment = await prisma.$transaction(async (tx) => {
+    const created = await tx.comment.create({
+      data: {
+        taskId,
+        authorId: user.id,
+        body: parsed.data.body,
+      },
+      include: { author: authorPublic },
+    });
+
+    await recordActivity(tx, {
+      projectId: task.projectId,
+      actorId: user.id,
       taskId,
-      authorId: user.id,
-      body: parsed.data.body,
-    },
-    include: { author: authorPublic },
+      type: "comment_added",
+      metadata: { taskTitle: task.title },
+    });
+
+    return created;
   });
 
   return NextResponse.json({ comment }, { status: 201 });

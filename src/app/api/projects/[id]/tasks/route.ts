@@ -10,6 +10,7 @@ import {
   canEditTasks,
 } from "@/lib/auth";
 import { createTaskSchema } from "@/schemas/task";
+import { recordActivity } from "@/lib/activity";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -68,19 +69,33 @@ export async function POST(req: NextRequest, { params }: Params) {
     select: { position: true },
   });
 
-  const task = await prisma.task.create({
-    data: {
+  // Create the task and its audit record atomically: the activity log is
+  // part of the trail, so a task must never exist without its "created" entry.
+  const task = await prisma.$transaction(async (tx) => {
+    const created = await tx.task.create({
+      data: {
+        projectId,
+        title: parsed.data.title,
+        description: parsed.data.description,
+        status,
+        assigneeId: parsed.data.assigneeId ?? null,
+        createdById: user.id,
+        position: (last?.position ?? -1) + 1,
+      },
+      include: {
+        assignee: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    await recordActivity(tx, {
       projectId,
-      title: parsed.data.title,
-      description: parsed.data.description,
-      status,
-      assigneeId: parsed.data.assigneeId ?? null,
-      createdById: user.id,
-      position: (last?.position ?? -1) + 1,
-    },
-    include: {
-      assignee: { select: { id: true, name: true, email: true } },
-    },
+      actorId: user.id,
+      taskId: created.id,
+      type: "task_created",
+      metadata: { taskTitle: created.title, status: created.status },
+    });
+
+    return created;
   });
 
   return NextResponse.json({ task }, { status: 201 });

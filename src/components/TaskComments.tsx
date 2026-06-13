@@ -6,6 +6,7 @@ import type { ApiComment, ApiProjectMember } from "@/types";
 
 type Props = {
   taskId: string;
+  projectId: string;
   members: ApiProjectMember[];
 };
 
@@ -19,7 +20,7 @@ function formatWhen(iso: string): string {
   });
 }
 
-export function TaskComments({ taskId, members }: Props) {
+export function TaskComments({ taskId, projectId, members }: Props) {
   const queryClient = useQueryClient();
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +51,7 @@ export function TaskComments({ taskId, members }: Props) {
     onSuccess: () => {
       setBody("");
       queryClient.invalidateQueries({ queryKey: commentsKey });
+      queryClient.invalidateQueries({ queryKey: ["activity", projectId] });
     },
     onError: (err) =>
       setError(err instanceof Error ? err.message : "could not post comment"),
