@@ -46,12 +46,13 @@ model User {
 }
 
 model Project {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  ownerId     String   @map("owner_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  ownerId         String   @map("owner_id")
+  airtableTableId String?  @map("airtable_table_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   owner       User         @relation("ProjectOwner", fields: [ownerId], references: [id])
   memberships Membership[]

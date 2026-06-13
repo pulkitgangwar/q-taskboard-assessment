@@ -107,6 +107,79 @@ curl -H "Authorization: Bearer <token>" http://localhost:3000/api/projects
 - `PATCH /api/tasks/:id` — Update a task (authenticated)
 - `DELETE /api/tasks/:id` — Delete a task (authenticated)
 
+### Comments (Part 3a)
+- `GET /api/tasks/:id/comments` — List a task's comments, chronological (members only)
+- `POST /api/tasks/:id/comments` — Add a comment, append-only (admins/members; viewers cannot)
+
+### Activity feed (Part 3b)
+- `GET /api/projects/:id/activity` — Project audit feed, most-recent-first (members only)
+
+### Airtable export (Part 3c)
+- `POST /api/projects/:id/export` — Export all of a project's tasks to Airtable (admins/members)
+
+## Airtable export (Part 3c)
+
+Exports every task in a project to a real Airtable base. Trigger it from the
+**"export to Airtable"** button on the project detail page (visible to admins and
+members), or via the API directly.
+
+**One table per project.** On first export the app creates a dedicated Airtable
+table for the project (named `"<project name> [<id>]"`) with the right columns,
+records its id, and reuses it on later exports — so tasks from different projects
+never share a table, and you never have to create columns by hand.
+
+### Configuration
+
+Create a `.env` file beside `docker-compose.yml` (compose passes these through to
+the container — re-run `docker compose up -d web` after changing them):
+
+```bash
+AIRTABLE_API_KEY="pat..."          # personal access token
+AIRTABLE_BASE_ID="app..."          # base id
+AIRTABLE_TABLE_NAME="Tasks"        # fallback name only; per-project tables are auto-created
+```
+
+The personal access token must be granted access to the target base and have all
+four scopes:
+
+- **`data.records:read`**, **`data.records:write`** — read/write task rows
+- **`schema.bases:read`**, **`schema.bases:write`** — list and create the per-project table
+
+(A token missing base access or these scopes returns `403 NOT_AUTHORIZED`.)
+
+### Table columns (created automatically)
+
+Each per-project table is created with these fields — `Task ID` is the primary
+field and the idempotency key:
+
+| Field | Type |
+|-------|------|
+| `Task ID` | Single line text — **used to de-duplicate** |
+| `Title` | Single line text |
+| `Description` | Long text |
+| `Status` | Single line text |
+| `Assignee` | Single line text |
+| `Position` | Number |
+| `Created At` | Single line text (ISO 8601) |
+
+### Behavior
+
+- **Idempotent.** Each row is keyed by `Task ID`. Re-running the export *updates*
+  existing rows instead of creating duplicates (see the response `created` vs
+  `updated` counts).
+- **Resilient to transient errors.** `429` (rate limit), `5xx`, and network errors
+  are retried with exponential back-off; `429` honours a 30s minimum wait. Permanent
+  `4xx` errors (e.g. `422`) are not retried.
+- **Partial-failure tolerant.** A single record that fails (after retries) is
+  reported in `failures[]` and does **not** abort the rest of the export.
+- **Rate-limit aware.** Writes are paced to stay under Airtable's 5 req/s-per-base limit.
+
+Example response:
+
+```json
+{ "summary": { "total": 7, "created": 7, "updated": 0, "failures": [] } }
+```
+
 ## Tech Stack
 
 - Node.js 20 (runtime)
