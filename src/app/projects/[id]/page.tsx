@@ -8,6 +8,8 @@ import { apiFetch, getToken } from "@/lib/api-client";
 import { Header } from "@/components/Header";
 import { StatusColumn } from "@/components/StatusColumn";
 import { TaskDetail } from "@/components/TaskDetail";
+import { ActivityFeed } from "@/components/ActivityFeed";
+import { ExportButton } from "@/components/ExportButton";
 import type { ApiProjectDetail, ApiTask, TaskStatus } from "@/types";
 import { STATUS_ORDER } from "@/types";
 
@@ -41,6 +43,7 @@ export default function ProjectPage({ params }: PageProps) {
     onSuccess: () => {
       setNewTitle("");
       queryClient.invalidateQueries({ queryKey: ["project", id] });
+      queryClient.invalidateQueries({ queryKey: ["activity", id] });
     },
     onError: (err) => setError(err instanceof Error ? err.message : "create failed"),
   });
@@ -91,6 +94,7 @@ export default function ProjectPage({ params }: PageProps) {
                   owner: {project.owner.name} · {project.memberships.length} members
                 </p>
               </div>
+              <ExportButton projectId={id} members={project.memberships} />
             </div>
 
             <section className="bg-surface border border-border rounded-lg p-4 mb-6">
@@ -164,6 +168,8 @@ export default function ProjectPage({ params }: PageProps) {
                 ))}
               </ul>
             </section>
+
+            <ActivityFeed projectId={id} />
           </>
         )}
       </main>

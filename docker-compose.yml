@@ -24,6 +24,11 @@ services:
       DATABASE_URL: postgresql://taskboard:taskboard@db:5432/taskboard?schema=public
       JWT_SECRET: dev-secret-change-me
       NODE_ENV: development
+      # Airtable export (Part 3c). Set these in your shell or a .env file beside
+      # docker-compose.yml; compose passes them through to the container.
+      AIRTABLE_API_KEY: ${AIRTABLE_API_KEY:-}
+      AIRTABLE_BASE_ID: ${AIRTABLE_BASE_ID:-}
+      AIRTABLE_TABLE_NAME: ${AIRTABLE_TABLE_NAME:-Tasks}
 
   test:
     build: .

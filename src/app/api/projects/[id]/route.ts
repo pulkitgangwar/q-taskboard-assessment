@@ -22,17 +22,20 @@ export async function GET(req: NextRequest, { params }: Params) {
   const membership = await getProjectMembership(user.id, id);
   if (!membership) return forbidden("you are not a member of this project");
 
+  // Only expose public user fields — never the bcrypt passwordHash.
+  const userPublic = { select: { id: true, name: true, email: true } } as const;
+
   const project = await prisma.project.findUnique({
     where: { id },
     include: {
-      owner: true,
+      owner: userPublic,
       memberships: {
-        include: { user: true },
+        include: { user: userPublic },
       },
       tasks: {
         include: {
-          assignee: true,
-          createdBy: true,
+          assignee: userPublic,
+          createdBy: userPublic,
         },
         orderBy: [{ status: "asc" }, { position: "asc" }],
       },

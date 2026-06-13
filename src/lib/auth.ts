@@ -55,3 +55,13 @@ export function canEditProject(role: ProjectRole | null | undefined): boolean {
 export function canEditTasks(role: ProjectRole | null | undefined): boolean {
   return role === "admin" || role === "member";
 }
+
+// Any member of a project can read its comments.
+export function canReadComments(role: ProjectRole | null | undefined): boolean {
+  return role === "admin" || role === "member" || role === "viewer";
+}
+
+// Viewers are read-only: only admins and members may post comments.
+export function canPostComment(role: ProjectRole | null | undefined): boolean {
+  return role === "admin" || role === "member";
+}

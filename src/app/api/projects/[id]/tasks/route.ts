@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   getCurrentUser,
@@ -9,6 +10,7 @@ import {
   canEditTasks,
 } from "@/lib/auth";
 import { createTaskSchema } from "@/schemas/task";
+import { recordActivity } from "@/lib/activity";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -22,21 +24,18 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const q = req.nextUrl.searchParams.get("q");
 
+  // Build the search filter with Prisma's query API so values are bound,
+  // never concatenated into SQL (prevents SQL injection via `q`).
+  const where: Prisma.TaskWhereInput = { projectId };
   if (q) {
-    // search across title and description
-    const sql = `
-      SELECT id, project_id, title, description, status, assignee_id, created_by_id, position, created_at, updated_at
-      FROM tasks
-      WHERE project_id = '${projectId}'
-        AND (title ILIKE '%${q}%' OR description ILIKE '%${q}%')
-      ORDER BY position ASC
-    `;
-    const tasks = await prisma.$queryRawUnsafe(sql);
-    return NextResponse.json({ tasks });
+    where.OR = [
+      { title: { contains: q, mode: "insensitive" } },
+      { description: { contains: q, mode: "insensitive" } },
+    ];
   }
 
   const tasks = await prisma.task.findMany({
-    where: { projectId },
+    where,
     include: {
       assignee: { select: { id: true, name: true, email: true } },
     },
@@ -70,19 +69,33 @@ export async function POST(req: NextRequest, { params }: Params) {
     select: { position: true },
   });
 
-  const task = await prisma.task.create({
-    data: {
+  // Create the task and its audit record atomically: the activity log is
+  // part of the trail, so a task must never exist without its "created" entry.
+  const task = await prisma.$transaction(async (tx) => {
+    const created = await tx.task.create({
+      data: {
+        projectId,
+        title: parsed.data.title,
+        description: parsed.data.description,
+        status,
+        assigneeId: parsed.data.assigneeId ?? null,
+        createdById: user.id,
+        position: (last?.position ?? -1) + 1,
+      },
+      include: {
+        assignee: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    await recordActivity(tx, {
       projectId,
-      title: parsed.data.title,
-      description: parsed.data.description,
-      status,
-      assigneeId: parsed.data.assigneeId ?? null,
-      createdById: user.id,
-      position: (last?.position ?? -1) + 1,
-    },
-    include: {
-      assignee: { select: { id: true, name: true, email: true } },
-    },
+      actorId: user.id,
+      taskId: created.id,
+      type: "task_created",
+      metadata: { taskTitle: created.title, status: created.status },
+    });
+
+    return created;
   });
 
   return NextResponse.json({ task }, { status: 201 });
